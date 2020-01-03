@@ -1,0 +1,43 @@
+#! /bin/bash -ex
+
+if [ -z $VERSION ]; then
+   echo "Env variable VERSION MUST be set"
+   exit 1
+fi
+
+if [ -z $RELEASE ]; then
+   echo "Env variable RELEASE MUST be set"
+   exit 1
+fi
+
+# delete the peculiar macros from the rpmbuild/centos7 image
+rm /home/builder/.rpmmacros
+
+# set up the build environment
+cd /home/builder
+mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+cp /srv/vmod-modules.spec rpmbuild/SPECS
+
+curl https://codeload.github.com/varnish/varnish-modules/tar.gz/${VERSION} -o rpmbuild/SOURCES/libvmod-modules-${VERSION}.tar.gz
+
+# install epel6/7 repo
+sudo yum install -y -q \
+     https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %{rhel}).noarch.rpm
+
+
+curl -s https://packagecloud.io/install/repositories/varnishcache/varnish41/script.rpm.sh | sudo bash
+
+# build requirements
+sudo yum install -y -q \
+     varnish-devel pkgconfig make gcc python-docutils gzip tar automake14
+
+sudo yum list installed | grep varnish
+
+# build RPMs
+rpmbuild -ba -D "dist .${DIST}" \
+         -D "_version ${VERSION}" \
+         -D "_release ${RELEASE}" \
+         rpmbuild/SPECS/vmod-modules.spec
+
+sudo cp rpmbuild/RPMS/*/* /srv
+sudo cp rpmbuild/SRPMS/* /srv
